@@ -177,24 +177,27 @@ int* hashMapGet(HashMap* map, const char* key)
 void resizeTable(HashMap* map, int capacity)
 {
     // FIXED: implement
-    struct HashMap* newMap = hashMapNew(capacity *2); // create new table
+    struct HashMap* newMap = hashMapNew(capacity); // create new table
 
     // copy values from old to new table
-      for (int i = 0; i < map->capacity; i++)
-      {
-          if(map->table[i] != NULL) // if it not NULL, then there is a linked list here
+    for (int i = 0; i < map->capacity; i++)
+    {
+        if(map->table[i] != NULL) // if it not NULL, then there is a linked list here
+        {
+          //
+          struct HashLink* tempLink = map->table[i]; // point 1st link
+          while(tempLink != NULL)
           {
-            //
-            struct HashLink* tempLink = map->table[i]; // point 1st link
-            while(tempLink != NULL)
-            {
-              hashMapPut(newMap, tempLink->key, tempLink->value);
-              tempLink = tempLink->next; // look at next one
-            }
+            hashMapPut(newMap, tempLink->key, tempLink->value);
+            tempLink = tempLink->next; // look at next one
           }
-      }
-      hashMapDelete(map); // delete old table function
-      map = newMap; // assign newMap to map pointer
+        }
+    }
+    hashMapCleanUp(map);
+    map->table = newMap->table;
+    map->size = newMap->size;
+    map->capacity = newMap->capacity;
+    free(newMap);
 }
 
 /**
@@ -217,6 +220,13 @@ void hashMapPut(HashMap* map, const char* key, int value)
     if(address == NULL) // if null, key does not exist yet
     {
       // thus create new link key to value
+
+      // first see if we need to resize the table
+      if (hashMapTableLoad(map) >= (float)MAX_TABLE_LOAD)
+      {
+        resizeTable(map, (map->capacity * 2));
+      }
+
       // find where to put it
       int index = HASH_FUNCTION(key) % map->capacity;
       if(index < 0)
@@ -226,7 +236,6 @@ void hashMapPut(HashMap* map, const char* key, int value)
       // creates a new link and puts it in the table "bucket"
       map->table[index] = HashLinkNew(key, value, map->table[index]);
       ++map->size;
-
     }
     else
     {
@@ -378,18 +387,19 @@ void hashMapPrint(HashMap* map)
 {
   // FIXED: implement
   // links is "size"
-for(int i = 0; i < map->capacity; i++) // capacity goes thru # of buckets
+  for(int i = 0; i < map->capacity; i++) // capacity goes thru # of buckets
   {
     if (map->table[i] != NULL)
     {
       printf("\nBucket %d -> ", i);
-    struct HashLink* tempLink = map->table[i];
+      struct HashLink* tempLink = map->table[i];
 
-    while(tempLink != NULL)
-    {
-      printf("(%s, %d) -> ", tempLink->key, tempLink->value);
-      tempLink = tempLink->next;
+      while(tempLink != NULL)
+      {
+        printf("(%s, %d) -> ", tempLink->key, tempLink->value);
+        tempLink = tempLink->next;
+      }
     }
   }
-  }
+  printf("\n");
 }

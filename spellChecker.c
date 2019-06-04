@@ -6,6 +6,9 @@
 #include <string.h>
 #include <ctype.h>
 
+void updatePossibleWords(HashLink* possibleWords, HashLink* newLink, int i);
+int levenshtein(char *s1, char *s2);
+
 /**
  * Allocates a string for the next word in the file and returns it. This string
  * is null terminated. Returns NULL after reaching the end of the file.
@@ -29,6 +32,11 @@ char* nextWord(FILE* file)
             {
                 maxLength *= 2;
                 word = realloc(word, maxLength);
+            }
+            // make case insensitive
+            if (c >= 'A' && c <= 'Z')
+            {
+              c += 32;
             }
             word[length] = c;
             length++;
@@ -61,8 +69,8 @@ void loadDictionary(FILE* file, HashMap* map)
     while(currentWord != NULL)
       {
         hashMapPut(map, currentWord, 1);
-        currentWord = nextWord;
         free(currentWord);
+        currentWord = nextWord(file);
     }
 }
 
@@ -88,12 +96,65 @@ int main(int argc, const char** argv)
 
     char inputBuffer[256];
     int quit = 0;
+    HashLink possibleWords[5];
     while (!quit)
     {
+        // re-initialize values to large numbers
+        possibleWords[0].value = 300;
+        possibleWords[1].value = 300;
+        possibleWords[2].value = 300;
+        possibleWords[3].value = 300;
+        possibleWords[4].value = 300;
         printf("Enter a word or \"quit\" to quit: ");
         scanf("%s", inputBuffer);
 
         // Implement the spell checker code here..
+
+        // Make sure inputBuffer is lower case
+        for (int i = 0; inputBuffer[i] != '\0'; ++i)
+        {
+          if (inputBuffer[i] >= 'A' && inputBuffer[i] <= 'Z')
+          {
+            inputBuffer[i] += 32;
+          }
+        }
+
+        printf("The inputted word \"%s\" is spelled ", inputBuffer);
+        // see if word is in Dictionary
+        if (hashMapContainsKey(map, inputBuffer))
+        {
+          printf("correctly\n");
+        }
+        else  // word is NOT in the dictionary
+        {
+          printf("incorrectly\nDid you mean...?\n");
+
+          // check every bucket
+          for(int i = 0; i < map->capacity; i++)
+          {
+              HashLink* currentLink = map->table[i];
+              // check every link in each bucket
+              while (currentLink != NULL)
+              {
+                  // calculate levenshtein value
+                  int newValue = levenshtein(inputBuffer, currentLink->key);
+                  currentLink->value = newValue;
+                  hashMapPut(map, currentLink->key, newValue);
+
+                  // update array of possible answers by comparing
+                  // newValue with possiblewords[x].value
+                  updatePossibleWords(possibleWords, currentLink, 4);
+
+                  currentLink = currentLink->next;
+              }
+          }
+
+          // print suggested possibleWords
+          for (int i = 0; i < 5; ++i)
+          {
+            printf("%s\n", possibleWords[i].key);
+          }
+        }
 
         if (strcmp(inputBuffer, "quit") == 0)
         {
@@ -103,4 +164,63 @@ int main(int argc, const char** argv)
 
     hashMapDelete(map);
     return 0;
+}
+
+void updatePossibleWords(HashLink* possibleWords, HashLink* newLink, int i)
+{
+    if (newLink->value < possibleWords[i].value)
+    {
+        // If this is not the last item in the array, we need to move it
+        // down an index in the pecking order
+        if (i < 4)
+        {
+          possibleWords[i+1].key = possibleWords[i].key;
+          possibleWords[i+1].value = possibleWords[i].value;
+        }
+
+        // If we are at the last index, we just update it and return
+        if (i == 0)
+        {
+          possibleWords[i].key = newLink->key;
+          possibleWords[i].value = newLink->value;
+          return;
+        }
+
+        // recursively call the function and compare the new value to
+        // the next index in the array
+        updatePossibleWords(possibleWords, newLink, i-1);
+    }
+    else
+    {
+        // this value will not be added to the array if its not smaller
+        // than the largest saved value
+        if (i < 4)
+        {
+            // value is not smaller than one at [i], save it into [i+1]
+            possibleWords[i+1].key = newLink->key;
+            possibleWords[i+1].value = newLink->value;
+        }
+    }
+}
+
+// Levenshtein Distance code Source:
+// Algorithm Implementation/Strings/Levenshtein distance
+// https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance
+#define MIN3(a, b, c) ((a) < (b) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
+
+int levenshtein(char *s1, char *s2) {
+    unsigned int x, y, s1len, s2len;
+    s1len = strlen(s1);
+    s2len = strlen(s2);
+    unsigned int matrix[s2len+1][s1len+1];
+    matrix[0][0] = 0;
+    for (x = 1; x <= s2len; x++)
+        matrix[x][0] = matrix[x-1][0] + 1;
+    for (y = 1; y <= s1len; y++)
+        matrix[0][y] = matrix[0][y-1] + 1;
+    for (x = 1; x <= s2len; x++)
+        for (y = 1; y <= s1len; y++)
+            matrix[x][y] = MIN3(matrix[x-1][y] + 1, matrix[x][y-1] + 1, matrix[x-1][y-1] + (s1[y-1] == s2[x-1] ? 0 : 1));
+
+    return(matrix[s2len][s1len]);
 }
